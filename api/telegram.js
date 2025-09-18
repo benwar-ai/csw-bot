@@ -16,7 +16,6 @@ const companyKnowledge = {
 // Fragt die Deepseek KI
 async function askDeepSeek(userQuestion) {
   try {
-    console.log("Sende Anfrage an Deepseek für Frage: ", userQuestion.substring(0, 50) + "...");
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -30,28 +29,11 @@ async function askDeepSeek(userQuestion) {
       })
     });
 
-    // ERST prüfen, ob die HTTP-Anfrage überhaupt erfolgreich war
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Deepseek API HTTP Fehler:', response.status, response.statusText, errorBody);
-      throw new Error(`HTTP-Error: ${response.status} - ${response.statusText}`);
-    }
-
-    // DANACH die Antwort als JSON parsen
     const data = await response.json();
-    console.log("Deepseek Rohtantwort:", JSON.stringify(data));
-
-    // JETZT sicher prüfen, ob die erwartete Struktur da ist
-    if (data && Array.isArray(data.choices) && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
-      return data.choices[0].message.content;
-    } else {
-      // Die API hat geantwortet, aber nicht in der erwarteten Form
-      console.error('Unerwartetes Antwortformat von Deepseek:', data);
-      return 'Die KI konnte keine klare Antwort generieren.';
-    }
+    return data.choices[0]?.message?.content || 'Entschuldigung, ich konnte keine Antwort generieren.';
 
   } catch (error) {
-    console.error('Fehler bei Deepseek:', error.message);
+    console.error('Fehler bei Deepseek:', error);
     return 'Es tut mir leid, der KI-Service ist aktuell nicht erreichbar. Bitte versuche es später noch einmal.';
   }
 }
@@ -69,35 +51,18 @@ module.exports = async function handler(request, response) {
       const chatId = message.chat.id;
       const userText = message.text.toLowerCase();
 
-      // 1. Prüfe, ob die Frage auf ein bekanntes Thema abzielt (KI-gestützt)
-      let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten.";
+      // 1. Prüfe zuerst die firmeninternen Daten
+      let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten oder das Intranet.";
 
-      // Erstelle einen Prompt für die KI, der die bekannten Themen beschreibt
-      const themeCheckPrompt = `
-Der Nutzer hat eine Frage gestellt. Ich habe eine Wissensdatenbank mit diesen Themen:
-THEMENLISTE:
-- Urlaubsantrag: Beantragung von Urlaub, Formulare, Verfahren
-- Gehaltsabrechnung: Lohn, Gehalt, Abrechnung, Payslip
-- IT-Problem: Computer, Software, Login, Technik, Helpdesk
-- Büroschlüssel: Schlüssel, Zugang, Büro, Raum
-- Krankenstand: Krankmeldung, Krank, Fehlzeit
+      for (const [keyword, answer] of Object.entries(companyKnowledge)) {
+        if (userText.includes(keyword)) {
+          botAnswer = answer;
+          break;
+        }
+      }
 
-ANALYSIERE die folgende Frage. Antworte NUR mit dem genauen Thema aus der THEMENLISTE (z.B. "Urlaubsantrag"), das am besten passt. Wenn KEINES passt, antworte "NEIN".
-
-FRAGE: ${userText}
-
-ANTWORT:
-`;
-
-      // Frage die KI, welches Thema gemeint ist
-      const detectedTheme = await askDeepSeek(themeCheckPrompt);
-      console.log("Erkanntes Thema:", detectedTheme); // Fürs Debugging
-
-      // Wenn ein Thema erkannt wurde, gib die passende Antwort aus companyKnowledge
-      if (detectedTheme !== "NEIN" && companyKnowledge[detectedTheme]) {
-        botAnswer = companyKnowledge[detectedTheme];
-      } else {
-        // 2. Wenn keine passende Antwort gefunden wurde, frage die KI generell
+      // 2. Wenn keine passende Antwort gefunden wurde, frage die KI
+      if (botAnswer.includes("keine Information")) {
         botAnswer = await askDeepSeek(userText);
       }
 
