@@ -1,10 +1,11 @@
 // api/telegram.js
-const fs = require('fs').promises;
 const fetch = require('node-fetch');
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const AUTHORIZED_USERS = (process.env.AUTHORIZED_USERS || '').split(',').map(u => u.trim());
+const AUTHORIZED_USERS = (process.env.AUTHORIZED_USERS || '')
+  .split(',')
+  .map(u => u.trim());
 
 // Firmeninterne Wissensdatenbank
 const companyKnowledge = {
@@ -30,6 +31,7 @@ async function askDeepSeek(prompt, temperature = 0.3) {
     })
   });
   const data = await res.json();
+  console.log('Deepseek response:', JSON.stringify(data));
   return data.choices?.[0]?.message?.content || '❌ Entschuldigung, es gab ein Problem mit der KI.';
 }
 
@@ -46,98 +48,97 @@ async function detectTheme(userText) {
   return theme.toLowerCase().trim();
 }
 
-// Logging unbekannter Fragen
-async function logUnknownQuestion(question) {
-  try {
-    const file = './unknown_questions.json';
-    let existing = [];
-    try {
-      const content = await fs.readFile(file, 'utf8');
-      existing = JSON.parse(content);
-    } catch (_) {
-      existing = [];
-    }
-    existing.push({ question, timestamp: new Date().toISOString() });
-    await fs.writeFile(file, JSON.stringify(existing, null, 2));
-  } catch (err) {
-    console.error('Logging failed:', err);
-  }
+// Sende Nachricht an Telegram
+async function sendTelegramMessage(chatId, text, keyboard = null) {
+  const body = { chat_id: chatId, text };
+  if (keyboard) body.reply_markup = keyboard;
+
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const result = await res.json();
+  console.log('Telegram sendMessage response:', JSON.stringify(result));
+  return result;
 }
 
 module.exports = async function handler(request, response) {
-  if (request.method === 'POST') {
-    try {
-      const { message, callback_query } = request.body;
-
-      // 1. Feedback-Antworten verarbeiten
-      if (callback_query) {
-        const chatId = callback_query.message.chat.id;
-        const feedback = callback_query.data;
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: feedback === 'yes'
-              ? '✅ Danke für dein Feedback!'
-              : '❌ Danke für dein Feedback, wir werden die Antwort verbessern.'
-          }),
-        });
-        return response.status(200).json({ ok: true });
-      }
-
-      const chatId = message.chat.id;
-      const userId = message.from.id.toString();
-      const userText = message.text.toLowerCase();
-
-      // 2. Authentifizierung prüfen
-      if (!AUTHORIZED_USERS.includes(userId)) {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text: '❌ Unbefugter Zugriff.' }),
-        });
-        return response.status(200).json({ ok: true });
-      }
-
-      // 3. KI-gestützte Themenerkennung
-      let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu...";
-      const detectedTheme = await detectTheme(userText);
-
-      if (companyKnowledge[detectedTheme]) {
-        botAnswer = companyKnowledge[detectedTheme];
-      } else if (detectedTheme === 'unbekannt') {
-        await logUnknownQuestion(userText);
-        botAnswer = await askDeepSeek(userText);
-      } else {
-        // Falls KI ein falsches Wort liefert, trotzdem Fallback
-        botAnswer = await askDeepSeek(userText);
-      }
-
-      // 4. Antwort mit Feedback-Buttons senden
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: botAnswer,
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '👍 Ja', callback_data: 'yes' },
-                { text: '👎 Nein', callback_data: 'no' }
-              ]
-            ]
-          }
-        }),
-      });
-
-      return response.status(200).json({ ok: true });
-    } catch (error) {
-      console.error('Error in handler:', error);
-      return response.status(500).json({ error: 'Internal Server Error' });
-    }
-  } else {
+  if (request.method !== 'POST') {
     return response.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  try {
+    console.log('Incoming body:', JSON.stringify(request.body, null, 2));
+    const { message, callback_query } = request.body;
+
+    // === Feedback-Buttons (callback_query) ===
+    if (callback_query) {
+      const chatId = callback_query.message.chat.id;
+      const feedback = callback_query.data;
+      const feedbackText =
+        feedback === 'yes'
+          ? '✅ Danke für dein Feedback!'
+          : '❌ Danke, wir verbessern die Antwort.';
+      await sendTelegramMessage(chatId, feedbackText);
+      return response.status(200).json({ ok: true });
+    }
+
+    if (!message || !message.chat || !message.from) {
+      console.warn('Ungültige Anfrage:', request.body);
+      return response.status(200).json({ ok: true });
+    }
+
+    const chatId = message.chat.id;
+    const userId = message.from.id.toString();
+    const userText = (message.text || '').toLowerCase().trim();
+    console.log(`Nachricht von User ${userId}:`, userText);
+
+    // === Authentifizierung ===
+    if (!AUTHORIZED_USERS.includes(userId)) {
+      console.warn(`Nicht autorisierter Zugriff von ${userId}`);
+      await sendTelegramMessage(chatId, '❌ Unbefugter Zugriff.');
+      return response.status(200).json({ ok: true });
+    }
+
+    // === Themenerkennung ===
+    let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu...";
+    const detectedTheme = await detectTheme(userText);
+    console.log('Detected theme:', detectedTheme);
+
+    if (companyKnowledge[detectedTheme]) {
+      botAnswer = companyKnowledge[detectedTheme];
+    } else if (detectedTheme === 'unbekannt') {
+      botAnswer = await askDeepSeek(userText);
+    } else {
+      botAnswer = await askDeepSeek(userText);
+    }
+
+    // === Antwort mit Feedback-Buttons ===
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '👍 Ja', callback_data: 'yes' },
+          { text: '👎 Nein', callback_data: 'no' }
+        ]
+      ]
+    };
+
+    await sendTelegramMessage(chatId, botAnswer, keyboard);
+
+    return response.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Fehler im Handler:', error.stack || error);
+    try {
+      // Versuche, den Benutzer über den Fehler zu informieren
+      const { message, callback_query } = request.body || {};
+      const chatId = message?.chat?.id || callback_query?.message?.chat?.id;
+      if (chatId) {
+        await sendTelegramMessage(chatId, '❌ Interner Fehler – bitte später erneut versuchen.');
+      }
+    } catch (_) {
+      // Falls selbst das fehlschlägt, ignorieren
+    }
+    return response.status(500).json({ error: 'Internal Server Error' });
   }
 };
