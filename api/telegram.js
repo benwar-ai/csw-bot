@@ -51,18 +51,35 @@ module.exports = async function handler(request, response) {
       const chatId = message.chat.id;
       const userText = message.text.toLowerCase();
 
-      // 1. Prüfe zuerst die firmeninternen Daten
-      let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten oder das Intranet.";
+      // 1. Prüfe, ob die Frage auf ein bekanntes Thema abzielt (KI-gestützt)
+      let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten.";
 
-      for (const [keyword, answer] of Object.entries(companyKnowledge)) {
-        if (userText.includes(keyword)) {
-          botAnswer = answer;
-          break;
-        }
-      }
+      // Erstelle einen Prompt für die KI, der die bekannten Themen beschreibt
+      const themeCheckPrompt = `
+Der Nutzer hat eine Frage gestellt. Ich habe eine Wissensdatenbank mit diesen Themen:
+THEMENLISTE:
+- Urlaubsantrag: Beantragung von Urlaub, Formulare, Verfahren
+- Gehaltsabrechnung: Lohn, Gehalt, Abrechnung, Payslip
+- IT-Problem: Computer, Software, Login, Technik, Helpdesk
+- Büroschlüssel: Schlüssel, Zugang, Büro, Raum
+- Krankenstand: Krankmeldung, Krank, Fehlzeit
 
-      // 2. Wenn keine passende Antwort gefunden wurde, frage die KI
-      if (botAnswer.includes("keine Information")) {
+ANALYSIERE die folgende Frage. Antworte NUR mit dem genauen Thema aus der THEMENLISTE (z.B. "Urlaubsantrag"), das am besten passt. Wenn KEINES passt, antworte "NEIN".
+
+FRAGE: ${userText}
+
+ANTWORT:
+`;
+
+      // Frage die KI, welches Thema gemeint ist
+      const detectedTheme = await askDeepSeek(themeCheckPrompt);
+      console.log("Erkanntes Thema:", detectedTheme); // Fürs Debugging
+
+      // Wenn ein Thema erkannt wurde, gib die passende Antwort aus companyKnowledge
+      if (detectedTheme !== "NEIN" && companyKnowledge[detectedTheme]) {
+        botAnswer = companyKnowledge[detectedTheme];
+      } else {
+        // 2. Wenn keine passende Antwort gefunden wurde, frage die KI generell
         botAnswer = await askDeepSeek(userText);
       }
 
