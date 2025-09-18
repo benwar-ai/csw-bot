@@ -13,40 +13,30 @@ const companyKnowledge = {
   // "stichwort": "Deine Antwort hier",
 };
 
-// ... (der Rest des Codes bleibt gleich) ...
+// Fragt die Deepseek KI
+async function askDeepSeek(userQuestion) {
+  try {
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + DEEPSEEK_API_KEY
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: userQuestion }],
+        max_tokens: 500
+      })
+    });
 
-// 1. Prüfe, ob die Frage auf ein bekanntes Thema abzielt (KI-gestützt)
-let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten.";
+    const data = await response.json();
+    return data.choices[0]?.message?.content || 'Entschuldigung, ich konnte keine Antwort generieren.';
 
-// Erstelle einen Prompt für die KI, der die bekannten Themen beschreibt
-const themeCheckPrompt = `
-Der Nutzer hat eine Frage gestellt. Ich habe eine Wissensdatenbank mit diesen Themen:
-THEMENLISTE:
-- Urlaubsantrag: Beantragung von Urlaub, Formulare, Verfahren
-- Gehaltsabrechnung: Lohn, Gehalt, Abrechnung, Payslip
-- IT-Problem: Computer, Software, Login, Technik, Helpdesk
-- Büroschlüssel: Schlüssel, Zugang, Büro, Raum
-- Krankenstand: Krankmeldung, Krank, Fehlzeit
-
-ANALYSIERE die folgende Frage. Antworte NUR mit dem genauen Thema aus der THEMENLISTE (z.B. "Urlaubsantrag"), das am besten passt. Wenn KEINES passt, antworte "NEIN".
-
-FRAGE: ${userText}
-
-ANTWORT:
-`;
-
-// Frage die KI, welches Thema gemeint ist
-const detectedTheme = await askDeepSeek(themeCheckPrompt);
-
-// Wenn ein Thema erkannt wurde, gib die passende Antwort aus companyKnowledge
-if (detectedTheme !== "NEIN" && companyKnowledge[detectedTheme]) {
-  botAnswer = companyKnowledge[detectedTheme];
-} else {
-  // 2. Wenn keine passende Antwort gefunden wurde, frage die KI generell
-  botAnswer = await askDeepSeek(userText);
+  } catch (error) {
+    console.error('Fehler bei Deepseek:', error);
+    return 'Es tut mir leid, der KI-Service ist aktuell nicht erreichbar. Bitte versuche es später noch einmal.';
+  }
 }
-
-// ... (der Rest des Codes bleibt gleich) ...
 
 // Hauptfunktion, die alle Anfragen bearbeitet
 module.exports = async function handler(request, response) {
@@ -97,4 +87,3 @@ module.exports = async function handler(request, response) {
     return response.status(405).json({ error: 'Nur POST-Anfragen sind erlaubt' });
   }
 };
-
