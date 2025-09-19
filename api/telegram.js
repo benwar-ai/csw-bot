@@ -10,7 +10,7 @@ const companyKnowledge = {
   "krankenstand": "🤒 Melde dich bitte am ersten Tag deiner Krankmeldung per Telefon bei deinem Vorgesetzten und fülle anschließend das Formular im Intranet aus."
 };
 
-// DeepSeek KI-Funktion
+// DeepSeek KI-Funktion (robust)
 async function askDeepSeek(userQuestion) {
   try {
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -27,7 +27,14 @@ async function askDeepSeek(userQuestion) {
     });
 
     const data = await response.json();
-    return data.choices[0]?.message?.content || 'Entschuldigung, ich konnte keine Antwort generieren.';
+
+    if (data && data.choices && data.choices.length > 0 && data.choices[0].message) {
+      return data.choices[0].message.content || 'Entschuldigung, ich konnte keine Antwort generieren.';
+    } else {
+      console.warn('DeepSeek hat kein gültiges Ergebnis geliefert:', data);
+      return 'Entschuldigung, ich konnte keine Antwort generieren.';
+    }
+
   } catch (error) {
     console.error('Fehler bei Deepseek:', error);
     return 'Es tut mir leid, der KI-Service ist aktuell nicht erreichbar. Bitte versuche es später noch einmal.';
@@ -45,7 +52,6 @@ module.exports = async function handler(req, res) {
     const update = req.body;
     console.log("Update erhalten:", JSON.stringify(update));
 
-    // chat_id aus allen möglichen update-typen extrahieren
     const message = update.message || update.edited_message || update.channel_post;
     if (!message || !message.text) {
       console.log("Kein Text im Update, Ignorieren.");
@@ -57,7 +63,7 @@ module.exports = async function handler(req, res) {
 
     let botAnswer = null;
 
-    // 1. Erst companyKnowledge prüfen (exakte oder teilmatches)
+    // 1. companyKnowledge zuerst prüfen
     for (const [keyword, answer] of Object.entries(companyKnowledge)) {
       if (userText.includes(keyword)) {
         botAnswer = answer;
