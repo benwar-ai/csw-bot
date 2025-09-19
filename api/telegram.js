@@ -7,7 +7,7 @@ const companyKnowledge = {
   "gehalt": "💶 Die Gehaltsabrechnung wird immer am 25. des Monats versendet. Bei Unstimmigkeiten wende dich bitte an hr@deine-firma.com.",
   "it problem": "🖥️ Bitte erstelle ein Ticket im Helpdesk-System: https://helpdesk.deine-firma.com. Unser IT-Support wird sich innerhalb von 24 Stunden bei dir melden.",
   "büro schlüssel": "🔑 Schlüssel können während der Bürozeiten (Mo-Fr, 8-16 Uhr) bei der Rezeption abgeholt werden.",
-  "krankenstand": "🤒 Melde dich bitte am ersten Tag deiner Krankmeldung per Telefon bei deinem Vorgesetzten und fülle anschließend das Formular im Intranet aus."
+  "krankenstand": "🤒 Melde dich bitte am ersten Tag deiner Krankmeldung per Telefon bei deinem Vorgesetzten und fülle anschließend das Formular im Intranet aus.",
   "persönliche dokumente": "📄 Du kannst persönliche Unterlagen (Gehaltsabrechnung, Arbeitsvertrag, Zertifikate, Führungszeugnis) hier anfordern: https://forms.office.com/e/LMhj6ekeqE. Nach Abschluss erhältst du die Dokumente automatisch per E-Mail.",
   "allgemeine dokumente": "📑 Allgemeine Unterlagen wie Newsletter, Sicherheitsunterweisungen oder Personalfragebogen kannst du hier anfordern: https://forms.office.com/e/qmAd9qH5uc. Die Dokumente werden automatisch per E-Mail versendet.",
   "mitarbeitergespräch": "🗓️ Termine für Mitarbeitergespräche kannst du hier anfragen: https://forms.office.com/e/7jhGkZrg4w. Die zuständige Person wird die Terminvereinbarung zeitnah bearbeiten.",
@@ -117,4 +117,5 @@ Frage: ${userText}`;
     return res.status(500).json({ error: 'Interner Serverfehler', details: err.message });
   }
 };
+
 
