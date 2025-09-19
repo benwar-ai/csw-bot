@@ -1,36 +1,31 @@
 // api/telegram.js
-
 export default async function handler(req, res) {
-  // Nur POST-Anfragen akzeptieren (Telegram Webhook sendet POST)
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const body = req.body;
+    const update = req.body;
 
-    // Telegram schickt Updates in "message" oder "edited_message"
-    const message = body.message || body.edited_message;
+    // Fange Updates ohne Nachricht oder Text ab
+    const message = update.message || update.edited_message;
     if (!message || !message.text) {
-      // Keine relevante Nachricht – trotzdem 200 OK zurückgeben
+      console.log('Kein Text im Update, Ignorieren:', update);
       return res.status(200).json({ ok: true });
     }
 
     const chatId = message.chat.id;
     const userText = message.text.trim().toLowerCase();
 
-    // Einfache vordefinierte Antworten (kannst du später erweitern)
     const companyKnowledge = {
-      urlaubsantrag: '📅 Das Urlaubsformular findest du hier: https://intranet.deine-firma.com/urlaub',
-      gehalt: '💶 Die Gehaltsabrechnung wird immer am 25. des Monats erstellt.',
-      'it problem': '🖥️ Bitte erstelle ein Ticket im Helpdesk-System.',
-      'büro schlüssel': '🔑 Schlüssel können während der Bürozeiten an der Rezeption abgeholt werden.',
-      krankenstand: '🤒 Melde dich bitte am ersten Tag telefonisch bei deiner Führungskraft.',
+      urlaubsantrag: '📅 Urlaubsformular: https://intranet.deine-firma.com/urlaub',
+      gehalt: '💶 Gehaltsabrechnung immer am 25.',
+      'it problem': '🖥️ Ticket im Helpdesk-System erstellen.',
+      'büro schlüssel': '🔑 Schlüssel während Bürozeiten an der Rezeption.',
+      krankenstand: '🤒 Am ersten Tag telefonisch krankmelden.',
     };
 
     let botAnswer = '❌ Entschuldigung, ich habe keine Information dazu.';
-
-    // Suche nach einem Keyword in der vordefinierten Liste
     for (const [keyword, answer] of Object.entries(companyKnowledge)) {
       if (userText.includes(keyword)) {
         botAnswer = answer;
@@ -38,34 +33,33 @@ export default async function handler(req, res) {
       }
     }
 
-    // Fallback-Antwort, wenn kein Keyword gefunden wurde
     if (botAnswer.includes('keine Information')) {
-      botAnswer = `Du hast gesagt: "${message.text}". (Hier könntest du später DeepSeek integrieren)`;
+      botAnswer = `Du hast gesagt: "${message.text}".`;
     }
 
-    // Telegram API-Aufruf zum Senden der Antwort
-    const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // In Vercel unter Environment Variables setzen
-    const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_TOKEN) {
+      console.error('Fehlender TELEGRAM_BOT_TOKEN!');
+      return res.status(500).json({ error: 'Fehlender Bot-Token' });
+    }
 
-    const response = await fetch(telegramUrl, {
+    const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    const tgResponse = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: botAnswer,
-      }),
+      body: JSON.stringify({ chat_id: chatId, text: botAnswer }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (!tgResponse.ok) {
+      const errorText = await tgResponse.text();
       console.error('Fehler beim Senden an Telegram:', errorText);
-      return res.status(500).json({ error: 'Fehler beim Senden an Telegram', details: errorText });
+      return res.status(500).json({ error: 'Telegram-Fehler', details: errorText });
     }
 
-    // Erfolgsmeldung an Telegram/Vercel zurückgeben
+    console.log('Antwort erfolgreich gesendet.');
     return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('Fehler im Handler:', error);
-    return res.status(500).json({ error: 'Interner Serverfehler', details: error.message });
+  } catch (err) {
+    console.error('Unerwarteter Fehler:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler', details: err.message });
   }
 }
