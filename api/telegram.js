@@ -43,6 +43,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Fehlender Bot-Token' });
     }
 
+
+console.log("Sende an Telegram:", {
+  chatId,
+  botAnswer,
+  url: `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`
+});
+    
     const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     const tgResponse = await fetch(telegramUrl, {
       method: 'POST',
@@ -63,3 +70,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Interner Serverfehler', details: err.message });
   }
 }
+
