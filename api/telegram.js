@@ -1,4 +1,3 @@
-// api/telegram.js
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
@@ -56,21 +55,25 @@ module.exports = async function handler(req, res) {
     const chatId = message.chat.id;
     const userText = message.text.toLowerCase().trim();
 
-    // Prüfe firmeninterne Antworten
-    let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten oder das Intranet.";
-    for (const [keyword, answer] of Object.entries(companyKnowledge)) {
-      if (userText.includes(keyword)) {
-        botAnswer = answer;
-        break;
-      }
-    }
+    // 1. KI-gestützte Themenzuordnung
+    const themePrompt = `Analysiere die Frage und weise sie einem Thema zu. 
+Mögliche Themen: Urlaubsantrag, Gehalt, IT-Problem, Büroschlüssel, Krankenstand.
+Gib nur das passende Thema zurück oder 'kein Thema', wenn nichts passt.
+Frage: ${userText}`;
 
-    // Falls keine Antwort gefunden, KI fragen
-    if (botAnswer.includes("keine Information")) {
+    const detectedTheme = await askDeepSeek(themePrompt);
+
+    let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten oder das Intranet.";
+
+    // 2. Wenn Thema erkannt wurde, companyKnowledge nutzen
+    if (detectedTheme && detectedTheme.toLowerCase() !== 'kein thema' && companyKnowledge[detectedTheme.toLowerCase()]) {
+      botAnswer = companyKnowledge[detectedTheme.toLowerCase()];
+    } else {
+      // 3. Falls kein Thema passt, frage die KI direkt
       botAnswer = await askDeepSeek(userText);
     }
 
-    // Sende Antwort an Telegram
+    // 4. Antwort an Telegram senden
     console.log("Sende an Telegram:", { chatId, botAnswer });
     const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     const tgResponse = await fetch(telegramUrl, {
