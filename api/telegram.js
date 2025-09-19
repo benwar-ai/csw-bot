@@ -55,25 +55,33 @@ module.exports = async function handler(req, res) {
     const chatId = message.chat.id;
     const userText = message.text.toLowerCase().trim();
 
-    // 1. KI-gestützte Themenzuordnung
-    const themePrompt = `Analysiere die Frage und weise sie einem Thema zu. 
+    let botAnswer = null;
+
+    // 1. Erst companyKnowledge prüfen (exakte oder teilmatches)
+    for (const [keyword, answer] of Object.entries(companyKnowledge)) {
+      if (userText.includes(keyword)) {
+        botAnswer = answer;
+        break;
+      }
+    }
+
+    // 2. Wenn kein Treffer, KI-Themenzuordnung + fallback
+    if (!botAnswer) {
+      const themePrompt = `Analysiere die Frage und weise sie einem Thema zu. 
 Mögliche Themen: Urlaubsantrag, Gehalt, IT-Problem, Büroschlüssel, Krankenstand.
 Gib nur das passende Thema zurück oder 'kein Thema', wenn nichts passt.
 Frage: ${userText}`;
 
-    const detectedTheme = await askDeepSeek(themePrompt);
+      const detectedTheme = await askDeepSeek(themePrompt);
 
-    let botAnswer = "❌ Entschuldigung, ich habe keine Information dazu. Bitte wende dich an deinen Vorgesetzten oder das Intranet.";
-
-    // 2. Wenn Thema erkannt wurde, companyKnowledge nutzen
-    if (detectedTheme && detectedTheme.toLowerCase() !== 'kein thema' && companyKnowledge[detectedTheme.toLowerCase()]) {
-      botAnswer = companyKnowledge[detectedTheme.toLowerCase()];
-    } else {
-      // 3. Falls kein Thema passt, frage die KI direkt
-      botAnswer = await askDeepSeek(userText);
+      if (detectedTheme && detectedTheme.toLowerCase() !== 'kein thema' && companyKnowledge[detectedTheme.toLowerCase()]) {
+        botAnswer = companyKnowledge[detectedTheme.toLowerCase()];
+      } else {
+        botAnswer = await askDeepSeek(userText);
+      }
     }
 
-    // 4. Antwort an Telegram senden
+    // 3. Antwort an Telegram senden
     console.log("Sende an Telegram:", { chatId, botAnswer });
     const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     const tgResponse = await fetch(telegramUrl, {
@@ -90,6 +98,7 @@ Frage: ${userText}`;
 
     console.log("Antwort erfolgreich gesendet.");
     return res.status(200).json({ ok: true });
+
   } catch (err) {
     console.error("Unerwarteter Fehler:", err);
     return res.status(500).json({ error: 'Interner Serverfehler', details: err.message });
